@@ -1,4 +1,4 @@
-## Kitchen
+## Client Service
 This repository, _Client Service_, represents a part of a bigger project of a food ordering simulation,
 performed as laboratory work during the _Network Programming_ course. Other components of
 this project are: 
