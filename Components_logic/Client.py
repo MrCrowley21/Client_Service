@@ -9,6 +9,7 @@ from config import *
 from Components_logic.Order import *
 from Components_logic.Individual_order import *
 from Components_logic.Client_service import *
+from Components_logic.Rating_system import *
 
 # initialize the logger mode
 logging.basicConfig(level=logging.DEBUG)
@@ -62,7 +63,19 @@ class Client:
         for order in orders:
             self.orders.append(order.__dict__)
 
-    def pick_up_order(self, barrier, address, order_id, wait_time):
+    def give_rating(self):
+        order_list = []
+        for order in self.orders:
+            order_list.append({'restaurant_id': order['restaurant_id'], 'order_id': self.client_id,
+                               'rating': order['rating'], 'estimated_waiting_time': order['estimated_waiting_time'],
+                               'waiting_time': order['waiting_time']})
+        rating_data = {'client_id': self.client_id, 'order_id': self.client_id, 'orders': order_list}
+        requests.post(f'{food_ordering_url}rating', json=rating_data)
+        logging.info(f'{rating_data}')
+
+    def pick_up_order(self, barrier, order, wait_time):
+        address = order['restaurant_address']
+        order_id = order['order_id']
         sleep(wait_time)
         response = requests.get(f'{address}v2/order/{order_id}').json()
         logging.info(f'22222222222 {response}')
@@ -70,8 +83,16 @@ class Client:
         while wait_time > 0:
             response = requests.get(f'{address}v2/order/{order_id}').json()
             wait_time = response['estimated_waiting_time']
-            sleep((wait_time + wait_time * 0.15) * time_unit)
-        barrier.wait()
+            sleep((wait_time + wait_time * 0.15)
+                  * time_unit)
+        logging.info(f'1111111111 Order prepared')
+        waiting_time = time.time() - response['registered_time']
+        max_wait = response['max_wait']
+        rating = RatingSystem().get_mark(waiting_time, max_wait)
+        order['rating'] = rating
+        order['waiting_time'] = waiting_time
+        logging.info(f'33333333 The mark was given')
+        # barrier.wait()
 
     def wait_picking_up_order(self, orders):
         orders.sort(key=lambda x: x['estimated_waiting_time'])
@@ -79,10 +100,13 @@ class Client:
         sleep_time = (sleep_time + sleep_time * 0.15) * time_unit
         barrier = Barrier(len(orders) + 1)
         for order in orders:
-            t = Thread(target=self.pick_up_order, args=(barrier, order["restaurant_address"], order["order_id"], sleep_time))
+            t = Thread(target=self.pick_up_order, args=(barrier, order, sleep_time))
             t.start()
             t.join()
-        barrier.wait()
+        logging.info(f'I am actually done')
+        # barrier.wait()
+        logging.info(f'4444444444 Go to do rating')
+        self.give_rating()
         del self
 
     def make_an_order(self):
@@ -96,4 +120,6 @@ class Client:
             response = requests.post(f'{food_ordering_url}order', json=self.__dict__).json()
             logging.info(f'The client {self.client_id} sent a the order to the Food Ordering Service')
             logging.info(f'Receiving response from the Food Ordering System\n{response}')
-            self.wait_picking_up_order(response['orders'])
+            self.orders.clear()
+            self.orders += response['orders']
+            self.wait_picking_up_order(self.orders)
