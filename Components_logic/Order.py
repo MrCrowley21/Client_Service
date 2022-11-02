@@ -3,7 +3,3 @@ class Order:
         self.client_id = client_id
         self.orders = None
 
-    # def set_order_time(self):
-    #     for order in self.orders:
-    #         order.created_time = time
-
